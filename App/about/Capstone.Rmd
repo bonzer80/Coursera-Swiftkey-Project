@@ -1,0 +1,41 @@
+---
+title: "Courser Data Science Capstone Project"
+author: "AR"
+date: "Friday, October 07, 2016"
+output: html_document
+runtime: shiny
+---
+
+## Introduction
+
+This is the Capstone Project for the Data Science specialization offered by Johns Hopkins University through Coursera.The objective of this project was to build a text prediction application using R. The application lets you type a phrase and predicts what the most likely next word of your phrase could be based on frequently occurring phrases (n-grams) in the provided data.
+
+The data for this Project, provided by Swift Key, comes from 3 different sources; blogs, news, and Twitter. The data is in multiple languages; English, Russian, German and Finnish. For the purpose of this application, English data was used. The link to download the training data for this report is given below.
+
+https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip
+
+
+
+## Cleaning the data and building n-grams
+
+The data provided for the project was quite unstructured and had to be cleaned up to be used for building  prediction model. The data set as such was quite large. So a portion of the data set was randomly sampled. The sampled data was cleaned of profanities, converted to lower case, removed of punctuation, URLs, numbers, and white-spaces. A corpus was built on based on the cleaned data.
+
+This corpus was then tokenized into matrices of n-grams. N-grams are the most frequently occurring combination of words in a given set of data. For the purpose of this application,2,3,4, and 5 grams were used.
+
+## Prediction Model
+
+A simple Backoff prediction model was used to build the application. This is how the application works:
+
+ * User inputs a phrase that is passed to the prediction model.
+ * The model calculates the length of the phrase. If the phrase contains more than four
+   words, only the last four words are used. 
+ * Starting with 5 grams, the model searches for an appropriate n-gram that matches the
+   input phrase
+ * If the first four words of the 5 gram match, the last four of the phrase, the fifth 
+   most frequently occuring fifth word is chosen as the predicted word,
+ * If there is no match, this process is repeted with the next lower n-gram until a
+   match is found.
+ * If the model is not able to predict the next word, it will return 'NA'.
+
+
+

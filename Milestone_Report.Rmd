@@ -1,0 +1,201 @@
+---
+title: "Milestone Report for Data Science Capstone Project"
+author: "AR"
+date: "Saturday, September 03, 2016"
+output: html_document
+---
+###Introduction
+
+This milestone report is for Capstone Project in Coursera's Data Science specialization offered by Johns Hopkins University.The goal of this report is to display that having taken the previous courses in the specialization, one has gotten used to working with unstructured data and performing data cleansing and exploratory analysis. The ultimate goal of the Capstone Project is to build an application that will predict the next word as the user types in a search phrase.
+
+The data for this Project  provided by Swift Key comes from 3 different sources; blogs, news, and Twitter. The data is in multiple languages; English, Russian, German and Finnish. For the purpose of this report, we will only use English data. The link to download the training data for this report is given below.
+
+https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip
+
+###Data Summary
+Let us load the data and summarize some basic facts about the files.
+
+
+```{r}
+library(stringi)
+library(ggplot2)
+
+blogs <- readLines('data/en_US/en_US.blogs.txt', encoding = 'UTF-8')
+news <- readLines('data/en_US/en_US.news.txt',encoding = 'UTF-8')
+twitter <- readLines('data/en_US/en_US.twitter.txt', encoding = 'UTF-8')
+
+# Display some basic information about the files such as the number of lines, average number of characters per line and the number of unique words.
+
+blogs.uw <- unlist(strsplit(blogs, '[ ]'))
+blogs.info <- c(length(blogs), mean(nchar(blogs)), length(unique(blogs.uw)))
+
+news.uw <- unlist(strsplit(news, '[ ]'))
+news.info <- c(length(news), mean(nchar(news)), length(unique(news.uw)))
+
+twitter.uw <- unlist(strsplit(twitter, '[ ]'))
+twitter.info <- c(length(twitter), mean(nchar(twitter)), length(unique(twitter.uw)))
+
+info <- data.frame(blogs.info, news.info, twitter.info)
+rownames(info) <- c("Number of lines", "Average number of characters per line", "Number of unique words")
+info
+
+```
+###Sampling
+
+Since the datasets are huge, we have to create a smaller sample for our analysis. 
+```{r}
+
+
+# Binomial sampling of the data and create the relevant files
+sampling <- function(data, percent)
+{
+  return(data[as.logical(rbinom(length(data),1,percent))])
+}
+set.seed(1345)
+
+sample.blogs   <- sampling(blogs, .01)
+sample.news   <- sampling(news, .01)
+sample.twitter   <- sampling(twitter, .01)
+
+dir.create("sample", showWarnings = FALSE)
+
+write(sample.blogs, "sample/sample.blogs.txt")
+write(sample.news, "sample/sample.news.txt")
+write(sample.twitter, "sample/sample.twitter.txt")
+
+```
+
+```{r, echo=FALSE}
+
+
+sample.blogs.uw <- unlist(strsplit(sample.blogs, '[ ]'))
+sample.blogs.info <- c(length(sample.blogs), mean(nchar(sample.blogs)), length(unique(sample.blogs.uw)))
+
+sample.news.uw <- unlist(strsplit(sample.news, '[ ]'))
+sample.news.info <- c(length(sample.news), mean(nchar(sample.news)), length(unique(sample.news.uw)))
+
+sample.twitter.uw <- unlist(strsplit(sample.twitter, '[ ]'))
+sample.twitter.info <- c(length(sample.twitter), mean(nchar(sample.twitter)), length(unique(sample.twitter.uw)))
+
+sample.info <- data.frame(sample.blogs.info, sample.twitter.info, sample.news.info)
+rownames(sample.info) <- c("Number of lines", "Average number of characters per line", "Number of unique words")
+
+```
+###Creating a Corpus and cleaning it
+Having sampled the data, let us create a corpus and cleanse it.
+```{r}
+library(tm)
+library(RWeka)
+library(SnowballC)
+sample.corpus <- c(sample.blogs,sample.news,sample.twitter)
+corpus<- Corpus(VectorSource(list(sample.corpus)))
+
+# There are many sources for finding the list of words that have been classified as profane. The source for this analysis is the link that follows.http://www.freewebheaders.com/full-list-of-bad-words-banned-by-google/
+
+profanity_list <- read.delim("profanity_list.txt",sep = ":",header = FALSE)
+profanity<-profanity_list[,1]
+rm(profanity_list)
+
+# Remove profanity
+corpus<- tm_map(corpus, removeWords, profanity)     
+
+# Convert to lowercase
+corpus<-tm_map(corpus, content_transformer(tolower))        
+
+# Cleanse the data further by removing punctuation, numbers, and whitespace.
+
+corpus<-tm_map(corpus, removePunctuation)                      # Remove punctuation
+corpus<-tm_map(corpus, removeNumbers)                          # Remove numbers
+#corpus<- tm_map(corpus, removeWords, stopwords("english"))  # Remove words like and,or,the etc.
+corpus<-tm_map(corpus, stripWhitespace)                        # Remove extra whitespace
+
+writeCorpus(corpus, filenames="my.corpus.txt")
+#corpus <- readLines("my.corpus.txt")
+```
+
+###N-gram analysis
+
+Having created and cleaned the corpus, we can now perform n-gram analysis on the data. An n-gram is a contiguous sequence of n items from a given sequence of text or speech.  We will analyze unigrams, bigrams, trigrams, and quadrigrams using the RWeka package.
+
+```{r}
+unigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 1, max = 1))
+bigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+trigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
+quadrigramTokenizer<-function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4))
+
+unigramMatrix <- TermDocumentMatrix(corpus, control = list(tokenize = unigramTokenizer))
+unigramMatrix<- removeSparseTerms(unigramMatrix, 0.99)
+bigramMatrix <- TermDocumentMatrix(corpus, control = list(tokenize = bigramTokenizer))
+bigramMatrix<- removeSparseTerms(bigramMatrix, 0.999)
+trigramMatrix <- TermDocumentMatrix(corpus, control = list(tokenize = trigramTokenizer))
+trigramMatrix<- removeSparseTerms(trigramMatrix, 0.999)
+quadrigramMatrix <- TermDocumentMatrix(corpus, control = list(tokenize = quadrigramTokenizer))
+quadrigramMatrix<- removeSparseTerms(quadrigramMatrix, 0.999)
+
+termfreq <- function(tdm){
+  freq <- sort(rowSums(as.matrix(tdm)), decreasing=TRUE)
+  termfreq <- data.frame(word=names(freq), freq=freq)
+  return(termfreq)
+}
+
+unigram.freq <- termfreq(unigramMatrix)
+bigram.freq <- termfreq(bigramMatrix)
+trigram.freq <- termfreq(trigramMatrix)
+quadrigram.freq <- termfreq(quadrigramMatrix)
+```
+###Plots
+
+####Unigrams
+
+```{r}
+
+ggplot(head(unigram.freq,25), aes(x=reorder(word,-freq), y=freq)) +
+  geom_bar(stat="Identity", fill="blue") + 
+  ggtitle("Unigrams frequency") +
+  ylab("Frequency") +
+  xlab("Term")
+```
+
+####Bigrams
+
+```{r}
+
+ggplot(head(bigram.freq,25), aes(x=reorder(word,-freq), y=freq)) + 
+  geom_bar(stat="Identity", fill="blue") + 
+  ggtitle("Bigrams frequencncy") +
+  ylab("Frequency") +
+  xlab("Term")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+####Trigrams
+
+```{r}
+
+ggplot(head(trigram.freq,25), aes(x=reorder(word,-freq), y=freq)) + 
+  geom_bar(stat="Identity", fill="blue") + 
+  ggtitle("Trigrams frequencncy") +
+  ylab("Frequency") +
+  xlab("Term")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+####Quadrigrams
+
+```{r}
+
+ggplot(head(quadrigram.freq,25), aes(x=reorder(word,-freq), y=freq)) + 
+  geom_bar(stat="Identity", fill="blue") + 
+  ggtitle("Quadrigrams frequencncy") +
+  ylab("Frequency") +
+  xlab("Term")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+###Next steps
+I'll be exploring more data cleansing strategies before starting to build the prediction model. As a part of the n-gram analysis, I tried removing stopwords from the corpus resulting in very different n-grams that show up as the most frequent . I have not included those results as a part of this report. The effect of removing stopwords needs to be analyzed further before building the model.
+
+The prediction model will use n-gram dataframes to determine the most likely current word and following three words. The plan is to create a Shiny app that will provide a user friendly interface for text input and the predicted next words. 
